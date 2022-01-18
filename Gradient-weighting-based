@@ -1,0 +1,38 @@
+# 加载模型用做预测
+json_file = open(r"model.json", "r")
+loaded_model_json = json_file.read()
+json_file.close()
+loaded_model = model_from_json(loaded_model_json)
+loaded_model.load_weights("model.h5")
+print("loaded model from disk")
+loaded_model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+# 分类准确率
+print("The accuracy of the classification model:")
+scores = loaded_model.evaluate(X_test, Y_test, verbose=0)
+print('%s: %.2f%%' % (loaded_model.metrics_names[1], scores[1] * 100))
+# 输出预测类别
+# X=X_test[0]
+# 热力图代码
+predicted = loaded_model.predict(test)
+class_idx = np.argmax(predicted[0])
+class_output = loaded_model.output[:,class_idx]
+last_conv_layer = loaded_model.get_layer("conv1d_6")#这里是最后一个特征提取操作
+# gap_weights = loaded_model.get_layer("max_pooling1d_3")#模型的GAP操作
+
+grads = K.gradients(class_output,last_conv_layer.output)[0]
+pooled_grads = K.mean(grads,axis=(0,1))
+iterate = K.function([loaded_model.input],[pooled_grads,last_conv_layer.output[0]])
+pooled_grads_value, conv_layer_output_value = iterate([test])
+#上采样
+conv_layer_output_value = np.reshape(conv_layer_output_value, (1,105, 64, 1))
+conv_layer_output_value = tf.image.resize_images(conv_layer_output_value, [1000, 64], method=0)
+session = tf.Session()
+img_resized =session.run(conv_layer_output_value)
+conv_layer_output_value = img_resized.reshape(img_resized.shape[1],img_resized.shape[2])
+# print(conv_layer_output_value.shape)
+
+weight = np.max(conv_layer_output_value, axis=-1)
+print(weight)
+print(len(weight))
+weight /= np.max(weight)
+# print(weight)
